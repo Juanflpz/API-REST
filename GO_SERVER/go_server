@@ -1,0 +1,75 @@
+package main
+
+import (
+    "database/sql"
+    "fmt"
+    "log"
+    "net/http"
+    "encoding/json"
+    "github.com/lib/pq"
+)
+
+type User struct {
+    ID         int    `json:"id"`
+    Username   string `json:"username"`
+    Password   string `json:"-"`
+    Email      string `json:"email"`
+    CreatedAt  string `json:"created_at"`
+}
+
+var db *sql.DB
+
+func main() {
+    var err error
+    db, err = sql.Open("postgres", "postgres://postgres:password@db/mydatabase?sslmode=disable")
+    if err != nil {
+        log.Fatal(err)
+    }
+    defer db.Close()
+
+    http.HandleFunc("/users", getUsers)
+    http.HandleFunc("/users/create", createUser)
+
+    fmt.Println("Server listening on port 8080")
+    log.Fatal(http.ListenAndServe(":8080", nil))
+}
+
+func getUsers(w http.ResponseWriter, r *http.Request) {
+    rows, err := db.Query("SELECT id, username, email, created_at FROM users")
+    if err != nil {
+        http.Error(w, err.Error(), http.StatusInternalServerError)
+        return
+    }
+    defer rows.Close()
+
+    users := []User{}
+    for rows.Next() {
+        var user User
+        if err := rows.Scan(&user.ID, &user.Username, &user.Email, &user.CreatedAt); err != nil {
+            http.Error(w, err.Error(), http.StatusInternalServerError)
+            return
+        }
+        users = append(users, user)
+    }
+
+    json.NewEncoder(w).Encode(users)
+}
+
+func createUser(w http.ResponseWriter, r *http.Request) {
+    var user User
+    json.NewDecoder(r.Body).Decode(&user)
+
+    _, err := db.Exec("INSERT INTO users (username, password_hash, email) VALUES ($1, $2, $3)",
+        user.Username, user.Password, user.Email)
+    if err != nil {
+        pqErr, ok := err.(*pq.Error)
+        if ok && pqErr.Code.Name() == "unique_violation" {
+            http.Error(w, "Username or Email already exists", http.StatusConflict)
+        } else {
+            http.Error(w, err.Error(), http.StatusInternalServerError)
+        }
+        return
+    }
+
+    w.WriteHeader(http.StatusCreated)
+}

@@ -7,21 +7,23 @@ import (
     "net/http"
     "encoding/json"
     "github.com/lib/pq"
+    "gorm.io/gorm"
 )
 
 type User struct {
+    gorm.Model
     ID         int    `json:"id"`
     Username   string `json:"username"`
-    Password   string `json:"-"`
+    Password   string `json:"password"`
     Email      string `json:"email"`
     CreatedAt  string `json:"created_at"`
 }
 
-var db *sql.DB
+var db *sql.DB //hold the database connection
 
 func main() {
     var err error
-    db, err = sql.Open("postgres", "postgres://postgres:password@db/mydatabase?sslmode=disable")
+    db, err = sql.Open("postgres", "postgres://postgres:password@db/mydatabase?sslmode=disable") //opens a connection to a PostgreSQL
     if err != nil {
         log.Fatal(err)
     }
@@ -29,47 +31,88 @@ func main() {
 
     http.HandleFunc("/users", getUsers)
     http.HandleFunc("/users/create", createUser)
+    http.HandleFunc("/users/{id}", updateUser)
+    http.HandleFunc("/users/{id}", deleteUser)
+    http.HandleFunc("/users/{id}", getUser)
 
     fmt.Println("Server listening on port 8080")
     log.Fatal(http.ListenAndServe(":8080", nil))
 }
 
+func updateUser(w http.ResponseWriter, r *http.Request) {
+    // ...
+}
+
+func getUser(w http.ResponseWriter, r *http.Request) {
+    //gets the id value from the route with mux
+    id, err := strconv.Atoi(mux.Vars(r)["id"]) //turns the value into an int with strconv.Atoi
+    if err != nil {
+        http.Error(w, "Not valid ID", http.StatusBadRequest)
+        return
+    }
+
+    user := User{}
+    err = db.First(&user, id).Error //obtains the user  by its id in the database using the First function from GORM
+    if err != nil {
+        if err == gorm.ErrRecordNotFound {
+            http.Error(w, "User not found", http.StatusNotFound)
+            return
+        }
+        http.Error(w, err.Error(), http.StatusInternalServerError)
+        return
+    }
+
+    //WRITES THE RESPONSEWRITER WITH THE USER DATA IN JSON FORMAT
+    json.NewEncoder(w).Encode(user)
+
+    //CONSOLE COMMANDS:
+    //http://localhost:8080/users/{id} OR curl -X GET http://localhost:8080/users/1
+}
+
+func deleteUser(w http.ResponseWriter, r *http.Request) {
+    // ...
+}
+
 func getUsers(w http.ResponseWriter, r *http.Request) {
-    rows, err := db.Query("SELECT id, username, email, created_at FROM users")
+    rows, err := db.Query("SELECT id, username, email, created_at FROM users") //executes the query
     if err != nil {
         http.Error(w, err.Error(), http.StatusInternalServerError)
         return
     }
     defer rows.Close()
 
-    users := []User{}
-    for rows.Next() {
-        var user User
+    users := []User{} //empty list
+    for rows.Next() { //iterates from the query
+        var user User //gets every user in the list
         if err := rows.Scan(&user.ID, &user.Username, &user.Email, &user.CreatedAt); err != nil {
             http.Error(w, err.Error(), http.StatusInternalServerError)
             return
         }
-        users = append(users, user)
+        users = append(users, user) //adds every user in the list
     }
 
-    json.NewEncoder(w).Encode(users)
+    json.NewEncoder(w).Encode(users) //writes the list to the responseWriter
+
+    //console commands:
+    //curl http://localhost:8080/users
 }
 
 func createUser(w http.ResponseWriter, r *http.Request) {
     var user User
-    json.NewDecoder(r.Body).Decode(&user)
+    json.NewDecoder(r.Body).Decode(&user) //attempts to decode the request body into the user struct
 
-    _, err := db.Exec("INSERT INTO users (username, password_hash, email) VALUES ($1, $2, $3)",
-        user.Username, user.Password, user.Email)
+    _, err := db.Exec("INSERT INTO users (id, username, password, email) VALUES ($1, $2, $3, $4)", user.ID, user.Username, user.Password, user.Email)
     if err != nil {
-        pqErr, ok := err.(*pq.Error)
+        pqErr, ok := err.(*pq.Error) //checks if the username or email already exists in the db
         if ok && pqErr.Code.Name() == "unique_violation" {
             http.Error(w, "Username or Email already exists", http.StatusConflict)
         } else {
-            http.Error(w, err.Error(), http.StatusInternalServerError)
+            http.Error(w, err.Error(), http.StatusInternalServerError) //for other conflicts that may happen
         }
         return
     }
+    w.WriteHeader(http.StatusCreated) //successful
 
-    w.WriteHeader(http.StatusCreated)
+    //console commands:
+    //#curl -X POST http://localhost:8080/users/create -H "Content-Type: application/json" -d '{"username": "johndoe", "email": "johndoe@example.com", "password": "your_password"}'
 }

@@ -7,17 +7,18 @@ services:
     restart: always
     environment:
       POSTGRES_DB: DATABASE
-      #BUILD: ./DATABASE PERO AL NIVEL DE PORTS
-      #POSTGRES_USER: myuser
-      #POSTGRES_PASSWORD: mypassword
     ports:
       - "5432:5432"
+    expose:
+      - "5432"
 
-  app:
-    build: ./app
-    container_name: golang_app
+  server:
+    build: ./server
+    container_name: golang_server
     restart: always
     depends_on:
-      - db
+      - postgres_db
     ports:
       - "8080:8080"
+    expose:
+      - "8080"

@@ -1,7 +1,7 @@
 package main
 
 import (
-	"database/sql"
+	//"database/sql"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -11,6 +11,7 @@ import (
 
 	"github.com/gorilla/mux"
 	"github.com/lib/pq"
+	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 )
 
@@ -23,15 +24,20 @@ type User struct {
 	CreatedAt string `json:"created_at"`
 }
 
-var db *sql.DB //hold the database connection
+var db *gorm.DB
 
+// var db1 *sql.DB //hold the database connection
 func main() {
-	var err error
-	db, err = sql.Open("postgres", "postgres://postgres:password@db/mydatabase?sslmode=disable") //opens a connection to a PostgreSQL
-	if err != nil {
-		log.Fatal(err)
+	//host := os.Getenv("DATABASE")
+	//host := "localhost"
+	var DSN = "host= localhost user=philly password=root1234 dbname=clients port=5432"
+	var error error
+	db, error = gorm.Open(postgres.Open(DSN), &gorm.Config{})
+	if error != nil {
+		log.Fatal(error)
+	} else {
+		log.Println("BD CONECTADA")
 	}
-	defer db.Close()
 
 	http.HandleFunc("/users", getUsers)
 	http.HandleFunc("/users/create", createUser)
@@ -56,19 +62,20 @@ func updateUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var userUpdates map[string]interface{}
-	err = json.NewDecoder(r.Body).Decode(&userUpdates)
+	/*
+		var userUpdates map[string]interface{}
+		err = json.NewDecoder(r.Body).Decode(&userUpdates)
+		if err != nil {
+			http.Error(w, "Solicitud inválida", http.StatusBadRequest)
+			return
+		} */
+
+	var user User
+	err = json.NewDecoder(r.Body).Decode(&user) //attempts to decode the request body into the user struct
 	if err != nil {
-		http.Error(w, "Solicitud inválida", http.StatusBadRequest)
+		http.Error(w, "Not valid REQUEST", http.StatusBadRequest)
 		return
 	}
-	/*
-	   var user User
-	   err = json.NewDecoder(r.Body).Decode(&user) //attempts to decode the request body into the user struct
-	   if err != nil {
-	       http.Error(w, "Not valid REQUEST", http.StatusBadRequest)
-	       return
-	   } */
 
 	//VALIDATIONS
 	if user.Username == "" {
@@ -85,21 +92,21 @@ func updateUser(w http.ResponseWriter, r *http.Request) {
 	}
 
 	/*
-	   err = db.Model(&user).Updates(user).Error //updates the user in the database using the Updates function from GORM
-	   if err != nil {
-	       http.Error(w, err.Error(), http.StatusInternalServerError)
-	       return
-	   } */
+		   err = db.Model(&user).Updates(user).Error //updates the user in the database using the Updates function from GORM
+			if err != nil {
+		    	http.Error(w, err.Error(), http.StatusInternalServerError)
+		    	return
+		   } */
 	//updates the user in the database using the Updates function from GORM
-	err = db.Model(&User{}).Where("id = ?", id).Updates(userUpdates).Error
+	err = db.Model(&User{}).Where("id = ?", id).Updates(user).Error
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
 	//Gets the updated user
-	user := User{}
-	err = db.First(&user, id).Error
+	updatedUser := User{}
+	err = db.First(&updatedUser, id).Error
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -170,7 +177,7 @@ func deleteUser(w http.ResponseWriter, r *http.Request) {
 }
 
 func getUsers(w http.ResponseWriter, r *http.Request) {
-	rows, err := db.Query("SELECT id, username, email, created_at FROM users") //executes the query
+	rows, err := db.Raw("SELECT id, username, email, created_at FROM clients").Rows() //executes the query
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -202,7 +209,7 @@ func createUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	_, err := db.Exec("INSERT INTO users (id, username, password, email) VALUES ($1, $2, $3, $4)", user.ID, user.Username, user.Password, user.Email)
+	err := db.Exec("INSERT INTO users (id, username, password, email) VALUES ($1, $2, $3, $4)", user.ID, user.Username, user.Password, user.Email).Error
 	if err != nil {
 		pqErr, ok := err.(*pq.Error) //checks if the username or email already exists in the db
 		if ok && pqErr.Code.Name() == "unique_violation" {

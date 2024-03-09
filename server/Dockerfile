@@ -11,8 +11,8 @@ RUN  go get -u github.com/gorilla/mux
 RUN  go get -u gorm.io/driver/postgres
 RUN  go get -u gorm.io/gorm
 
-RUN go build -o main .
+RUN go build -o go-server .
 
-CMD ["./main"]
+CMD ["./go-server"]
 #EJECUTAMOS EL PROYECTO
 #CMD ["go", "run", "main.go"]

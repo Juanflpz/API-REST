@@ -1,4 +1,4 @@
-package goserver
+package server
 
 import (
 	//"database/sql"
@@ -8,7 +8,6 @@ import (
 	"net/http"
 	"regexp"
 	"strconv"
-
 	"github.com/gorilla/mux"
 	"github.com/lib/pq"
 	"gorm.io/driver/postgres"

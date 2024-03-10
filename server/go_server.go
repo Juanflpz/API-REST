@@ -1,4 +1,4 @@
-package main
+package goserver
 
 import (
 	//"database/sql"
@@ -62,14 +62,7 @@ func updateUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	/*
-		var userUpdates map[string]interface{}
-		err = json.NewDecoder(r.Body).Decode(&userUpdates)
-		if err != nil {
-			http.Error(w, "Solicitud inválida", http.StatusBadRequest)
-			return
-		} */
-
+	//dudo acá-------------------------------------------------------------------------
 	var user User
 	err = json.NewDecoder(r.Body).Decode(&user) //attempts to decode the request body into the user struct
 	if err != nil {
@@ -90,17 +83,14 @@ func updateUser(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "The email must have a valid format", http.StatusBadRequest)
 		return
 	}
-
-	/*
-		   err = db.Model(&user).Updates(user).Error //updates the user in the database using the Updates function from GORM
-			if err != nil {
-		    	http.Error(w, err.Error(), http.StatusInternalServerError)
-		    	return
-		   } */
 	//updates the user in the database using the Updates function from GORM
 	err = db.Model(&User{}).Where("id = ?", id).Updates(user).Error
+	if err == gorm.ErrRecordNotFound {
+		http.Error(w, "User not found", http.StatusNotFound)
+		return
+	}
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		http.Error(w, err.Error()+"hola prueba", http.StatusInternalServerError)
 		return
 	}
 
@@ -113,6 +103,7 @@ func updateUser(w http.ResponseWriter, r *http.Request) {
 	}
 
 	//WRITES THE RESPONSEWRITER WITH THE USER DATA IN JSON FORMAT
+	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(user)
 
 	//CONSOLE COMMANDS:
@@ -144,6 +135,7 @@ func getUser(w http.ResponseWriter, r *http.Request) {
 	}
 
 	//WRITES THE RESPONSEWRITER WITH THE USER DATA IN JSON FORMAT
+	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(user)
 
 	//CONSOLE COMMANDS:
@@ -154,7 +146,7 @@ func deleteUser(w http.ResponseWriter, r *http.Request) {
 	//gets the id value from the route with mux
 	id, err := strconv.Atoi(mux.Vars(r)["id"]) //turns the value into an int with strconv.Atoi
 	if err != nil {
-		http.Error(w, "ID inválido", http.StatusBadRequest)
+		http.Error(w, "Not valid id", http.StatusBadRequest)
 		return
 	}
 
@@ -194,6 +186,7 @@ func getUsers(w http.ResponseWriter, r *http.Request) {
 		users = append(users, user) //adds every user in the list
 	}
 
+	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(users) //writes the list to the responseWriter
 
 	//console commands:
@@ -204,7 +197,7 @@ func createUser(w http.ResponseWriter, r *http.Request) {
 	var user User
 	json.NewDecoder(r.Body).Decode(&user) //attempts to decode the request body into the user struct
 
-	if r.Method != "POST}" {
+	if r.Method != "POST" {
 		http.Error(w, "Not allowed method", http.StatusMethodNotAllowed)
 		return
 	}

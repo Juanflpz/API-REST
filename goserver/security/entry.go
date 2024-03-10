@@ -1,6 +1,7 @@
 package security
 
 import (
+	"crypto/md5"
 	"encoding/json"
 	"fmt"
 	"go-rest-api/data"
@@ -8,7 +9,8 @@ import (
 	"regexp"
 
 	"github.com/dgrijalva/jwt-go"
-	"github.com/golang/bcrypt"
+
+	//"github.com/golang/bcrypt"
 	"gorm.io/gorm"
 )
 
@@ -34,16 +36,20 @@ func RegisterUser(w http.ResponseWriter, r *http.Request, db *gorm.DB) {
 		http.Error(w, "The email must have a valid format", http.StatusBadRequest)
 		return
 	}
+	/*
+		// Hash the password before storing it in the database
+		hashedPassword, err := bcrypt.GenerateFromPassword([]byte(user.Password), bcrypt.DefaultCost)
+		if err != nil {
+			http.Error(w, "Error hashing password", http.StatusInternalServerError)
+			return
+		}
+		user.Password = string(hashedPassword) */
 
 	// Hash the password before storing it in the database
-	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(user.Password), bcrypt.DefaultCost)
-	if err != nil {
-		http.Error(w, "Error hashing password", http.StatusInternalServerError)
-		return
-	}
-	user.Password = string(hashedPassword)
+	hashedPassword := hashPassword(user.Password)
+	user.Password = hashedPassword
 
-	err = db.Create(&user).Error
+	err := db.Create(&user).Error
 	if err != nil {
 		http.Error(w, "Error creating user", http.StatusInternalServerError)
 		return
@@ -51,6 +57,11 @@ func RegisterUser(w http.ResponseWriter, r *http.Request, db *gorm.DB) {
 
 	w.WriteHeader(http.StatusCreated)
 	json.NewEncoder(w).Encode(user)
+}
+
+func hashPassword(password string) string {
+	hashed := md5.Sum([]byte(password))
+	return fmt.Sprintf("%x", hashed)
 }
 
 func validEmail(email string) bool {
@@ -89,20 +100,27 @@ func LoginUser(w http.ResponseWriter, r *http.Request, db *gorm.DB) {
 		return
 	}
 
-	// Ahora, user.Password contiene la contraseña ingresada por el usuario
-	// storedUser.Password contiene la contraseña hasheada almacenada en la base de datos
-	// Compara la contraseña ingresada con la contraseña hasheada almacenada
-	if err := bcrypt.CompareHashAndPassword([]byte(storedUser.Password), []byte(user.Password)); err != nil {
+	// Comparar contraseñas hasheadas
+	if storedUser.Password != hashPassword(user.Password) {
 		http.Error(w, "Invalid username or password", http.StatusUnauthorized)
 		return
 	}
+
 	/*
-		// Generar el token JWT
-		token := jwt.New(jwt.SigningMethodHS256)
-		claims := token.Claims.(jwt.MapClaims)
-		claims["sub"] = creds.Username
-		claims["exp"] = time.Now().Add(time.Hour).Unix() // Token válido por una hora
-		claims["iss"] = "ingesis.uniquindio.edu.co" */
+		// Ahora, user.Password contiene la contraseña ingresada por el usuario
+		// storedUser.Password contiene la contraseña hasheada almacenada en la base de datos
+		// Compara la contraseña ingresada con la contraseña hasheada almacenada
+		if err := bcrypt.CompareHashAndPassword([]byte(storedUser.Password), []byte(user.Password)); err != nil {
+			http.Error(w, "Invalid username or password", http.StatusUnauthorized)
+			return
+		}
+		/*
+			// Generar el token JWT
+			token := jwt.New(jwt.SigningMethodHS256)
+			claims := token.Claims.(jwt.MapClaims)
+			claims["sub"] = creds.Username
+			claims["exp"] = time.Now().Add(time.Hour).Unix() // Token válido por una hora
+			claims["iss"] = "ingesis.uniquindio.edu.co" */
 
 	// Create JWT token
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{

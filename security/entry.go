@@ -3,26 +3,16 @@ package security
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/golang/bcrypt"
-	"go-server/server"
 	"net/http"
-	"github.com/dgrijalva/jwt-go"
 	"regexp"
+	"go-rest-api/server"
+	"github.com/dgrijalva/jwt-go"
+	"github.com/golang/bcrypt"
 	"gorm.io/gorm"
 )
 
-type Admin struct {
-	gorm.Model
-	ID        int    `json:"id"`
-	Username  string `json:"username"`
-	Password  string `json:"password"`
-	Email     string `json:"email"`
-}
-
-var db *gorm.DB
-
-func registerUser(w http.ResponseWriter, r *http.Request) {
-    var user Admin
+func registerUser(w http.ResponseWriter, r *http.Request, db *gorm.DB) {
+    var user server.User
     json.NewDecoder(r.Body).Decode(&user)
 
 	if r.Method != http.MethodPost {
@@ -67,14 +57,9 @@ func validEmail(email string) bool {
 	return re.MatchString(email)
 }
 
-func loginUser(w http.ResponseWriter, r *http.Request) {
-	var user Admin
-
-    err = json.NewDecoder(r.Body).Decode(&user)
-	if err != nil {
-		http.Error(w, "Not valid credentials", http.StatusBadRequest)
-		return
-	}
+func loginUser(w http.ResponseWriter, r *http.Request, db *gorm.DB) {
+	var user server.User
+    json.NewDecoder(r.Body).Decode(&user)
 
 	if r.Method != http.MethodPost {
 		http.Error(w, "Not allowed method", http.StatusMethodNotAllowed)
@@ -91,12 +76,25 @@ func loginUser(w http.ResponseWriter, r *http.Request) {
         return
     }
 
-    // Compare passwords (using bcrypt.CompareHashAndPassword)
-    if err := bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(user.Password)); err != nil {
-        http.Error(w, "Invalid username or password", http.StatusUnauthorized)
-        return
-    }
+	// Primero, obtienes el usuario de la base de datos basándote en el username
+	var storedUser server.User
+	err = db.Where("username = ?", user.Username).First(&storedUser).Error
+	if err != nil {
+		if err == gorm.ErrRecordNotFound {
+			http.Error(w, "Invalid username or password", http.StatusUnauthorized)
+		} else {
+			http.Error(w, "Error retrieving user", http.StatusInternalServerError)
+		}
+		return
+	}
 
+	// Ahora, user.Password contiene la contraseña ingresada por el usuario
+	// storedUser.Password contiene la contraseña hasheada almacenada en la base de datos
+	// Compara la contraseña ingresada con la contraseña hasheada almacenada
+	if err := bcrypt.CompareHashAndPassword([]byte(storedUser.Password), []byte(user.Password)); err != nil {
+		http.Error(w, "Invalid username or password", http.StatusUnauthorized)
+		return
+	}
 	/*
 	// Generar el token JWT
 	token := jwt.New(jwt.SigningMethodHS256)
@@ -119,9 +117,3 @@ func loginUser(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/plain")
     fmt.Fprint(w, signedToken)
 }
-
-
-
-
-
-

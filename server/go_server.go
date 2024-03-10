@@ -4,25 +4,27 @@ import (
 	//"database/sql"
 	"encoding/json"
 	"fmt"
+	"go-rest-api/security"
 	"log"
 	"net/http"
 	"regexp"
 	"strconv"
+	"github.com/dgrijalva/jwt-go"
 	"github.com/gorilla/mux"
 	"github.com/lib/pq"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 )
 
+var db *gorm.DB
+
 type User struct {
 	gorm.Model
-	ID        int    `json:"id"`
-	Username  string `json:"username"`
-	Password  string `json:"password"`
-	Email     string `json:"email"`
+	ID       int    `json:"id"`
+	Username string `json:"username"`
+	Password string `json:"password"`
+	Email    string `json:"email"`
 }
-
-var db *gorm.DB
 
 // var db1 *sql.DB //hold the database connection
 func main() {
@@ -41,10 +43,90 @@ func main() {
 	http.HandleFunc("/users/create", createUser)
 	http.HandleFunc("/users/update/{id}", updateUser)
 	http.HandleFunc("/users/delete/{id}", deleteUser)
+	http.HandleFunc("/login", loginUserHandler)
+	http.HandleFunc("/register", registerUserHandler)
 	http.HandleFunc("/users/{id}", getUser)
 
 	fmt.Println("Server listening on port 8080")
 	log.Fatal(http.ListenAndServe(":8080", nil))
+}
+
+func registerUserHandler(w http.ResponseWriter, r *http.Request) {
+	security.RegisterUser(w, r, db)
+}
+
+func loginUserHandler(w http.ResponseWriter, r *http.Request) {
+	security.loginUser(w, r, db)
+}
+
+func getUsersJWT(w http.ResponseWriter, r *http.Request) {
+	tokenString := r.Header.Get("Authorization")
+
+	if tokenString == "" {
+		http.Error(w, "Not given JWT token", http.StatusUnauthorized)
+		return
+	}
+
+	// Verify if the given JWT token is valid
+	token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
+		if token.Method != jwt.SigningMethodHS256 {
+			return nil, fmt.Errorf("Not valid signing method")
+		}
+		return []byte("secret"), nil
+	})
+	if err != nil {
+		http.Error(w, "Not valid JWT token (1): "+err.Error(), http.StatusUnauthorized)
+		return
+	}
+
+	if _, ok := token.Claims.(jwt.MapClaims); !ok && !token.Valid {
+		http.Error(w, "Invalid token", http.StatusUnauthorized)
+		return
+	}
+
+	rows, err := db.Raw("SELECT id, username, email, created_at FROM clients").Rows()
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	defer rows.Close()
+
+	users := []User{} //empty list
+	for rows.Next() { //iterates from the query
+		var user User //gets every user in the list
+		if err := rows.Scan(&user.ID, &user.Username, &user.Email, &user.CreatedAt); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		users = append(users, user) //adds every user in the list
+	}
+
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(users) //writes the list to the responseWriter
+}
+func getUsers(w http.ResponseWriter, r *http.Request) {
+	rows, err := db.Raw("SELECT id, username, email, created_at FROM clients").Rows() //executes the query
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	defer rows.Close()
+
+	users := []User{} //empty list
+	for rows.Next() { //iterates from the query
+		var user User //gets every user in the list
+		if err := rows.Scan(&user.ID, &user.Username, &user.Email, &user.CreatedAt); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		users = append(users, user) //adds every user in the list
+	}
+
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(users) //writes the list to the responseWriter
+
+	//console commands:
+	//curl http://localhost:8080/users
 }
 
 func updateUser(w http.ResponseWriter, r *http.Request) {
@@ -164,31 +246,6 @@ func deleteUser(w http.ResponseWriter, r *http.Request) {
 
 	//CONSOLE COMMANDS:
 	//curl -X DELETE http://localhost:8080/users/delete/{id}
-}
-
-func getUsers(w http.ResponseWriter, r *http.Request) {
-	rows, err := db.Raw("SELECT id, username, email, created_at FROM clients").Rows() //executes the query
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	defer rows.Close()
-
-	users := []User{} //empty list
-	for rows.Next() { //iterates from the query
-		var user User //gets every user in the list
-		if err := rows.Scan(&user.ID, &user.Username, &user.Email, &user.CreatedAt); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-		users = append(users, user) //adds every user in the list
-	}
-
-	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(users) //writes the list to the responseWriter
-
-	//console commands:
-	//curl http://localhost:8080/users
 }
 
 func createUser(w http.ResponseWriter, r *http.Request) {

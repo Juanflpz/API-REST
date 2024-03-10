@@ -20,7 +20,6 @@ type User struct {
 	Username  string `json:"username"`
 	Password  string `json:"password"`
 	Email     string `json:"email"`
-	CreatedAt string `json:"created_at"`
 }
 
 var db *gorm.DB

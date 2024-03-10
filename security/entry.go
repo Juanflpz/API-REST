@@ -3,10 +3,12 @@ package security
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/golang/bcrypt"
 	"go-server/server"
 	"net/http"
-	"time"
 	"github.com/dgrijalva/jwt-go"
+	"regexp"
+	"gorm.io/gorm"
 )
 
 type Admin struct {
@@ -14,6 +16,7 @@ type Admin struct {
 	ID        int    `json:"id"`
 	Username  string `json:"username"`
 	Password  string `json:"password"`
+	Email     string `json:"email"`
 }
 
 var db *gorm.DB
@@ -27,11 +30,19 @@ func registerUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-    // Validate user data (username, email, password)
-    if err := validateUser(user); err != nil {
-        http.Error(w, err.Error(), http.StatusBadRequest)
-        return
-    }
+    //VALIDATIONS
+	if user.Username == "" {
+		http.Error(w, "The username must not be empty", http.StatusBadRequest)
+		return
+	}
+	if user.Email == "" {
+		http.Error(w, "The email must not be empty", http.StatusBadRequest)
+		return
+	}
+	if !validEmail(user.Email) {
+		http.Error(w, "The email must have a valid format", http.StatusBadRequest)
+		return
+	}
 
     // Hash the password before storing it in the database
     hashedPassword, err := bcrypt.GenerateFromPassword([]byte(user.Password), bcrypt.DefaultCost)
@@ -51,8 +62,14 @@ func registerUser(w http.ResponseWriter, r *http.Request) {
     json.NewEncoder(w).Encode(user)
 }
 
+func validEmail(email string) bool {
+	re := regexp.MustCompile("^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*$")
+	return re.MatchString(email)
+}
+
 func loginUser(w http.ResponseWriter, r *http.Request) {
-	var user server.User
+	var user Admin
+
     err = json.NewDecoder(r.Body).Decode(&user)
 	if err != nil {
 		http.Error(w, "Not valid credentials", http.StatusBadRequest)
@@ -102,31 +119,6 @@ func loginUser(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/plain")
     fmt.Fprint(w, signedToken)
 }
-
-/*
-// Middleware function to check for valid JWT token
-func jwtMiddleware(next http.Handler) http.Handler {
-    return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-        // Extract token from request header
-        tokenString := r.Header.Get("Authorization")
-
-        // Verify token
-        token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
-            return []byte("secret"), nil
-        })
-
-        // If token is invalid or missing
-        if err != nil || !token.Valid {
-            http.Error(w, "Invalid token", http.StatusUnauthorized)
-            return
-        }
-
-        // Proceed with the request if token is valid
-        next.ServeHTTP(w, r)
-    })
-}
-
-http.Handle("/users", jwtMiddleware(getUsers))
 
 
 

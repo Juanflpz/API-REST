@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"go-rest-api/security"
+	"go-rest-api/data"
 	"log"
 	"net/http"
 	"regexp"
@@ -18,14 +19,6 @@ import (
 
 var db *gorm.DB
 
-type User struct {
-	gorm.Model
-	ID       int    `json:"id"`
-	Username string `json:"username"`
-	Password string `json:"password"`
-	Email    string `json:"email"`
-}
-
 // var db1 *sql.DB //hold the database connection
 func main() {
 	//host := os.Getenv("DATABASE")
@@ -36,7 +29,7 @@ func main() {
 	if error != nil {
 		log.Fatal(error)
 	} else {
-		log.Println("BD CONECTADA")
+		log.Println("CONNECTED")
 	}
 
 	http.HandleFunc("/users", getUsers)
@@ -56,7 +49,7 @@ func registerUserHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func loginUserHandler(w http.ResponseWriter, r *http.Request) {
-	security.loginUser(w, r, db)
+	security.LoginUser(w, r, db)
 }
 
 func getUsersJWT(w http.ResponseWriter, r *http.Request) {
@@ -91,9 +84,9 @@ func getUsersJWT(w http.ResponseWriter, r *http.Request) {
 	}
 	defer rows.Close()
 
-	users := []User{} //empty list
+	users := []data.User{} //empty list
 	for rows.Next() { //iterates from the query
-		var user User //gets every user in the list
+		var user data.User //gets every user in the list
 		if err := rows.Scan(&user.ID, &user.Username, &user.Email, &user.CreatedAt); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
@@ -112,9 +105,9 @@ func getUsers(w http.ResponseWriter, r *http.Request) {
 	}
 	defer rows.Close()
 
-	users := []User{} //empty list
+	users := []data.User{} //empty list
 	for rows.Next() { //iterates from the query
-		var user User //gets every user in the list
+		var user data.User //gets every user in the list
 		if err := rows.Scan(&user.ID, &user.Username, &user.Email, &user.CreatedAt); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
@@ -143,7 +136,7 @@ func updateUser(w http.ResponseWriter, r *http.Request) {
 	}
 
 	//dudo acá-------------------------------------------------------------------------
-	var user User
+	var user data.User
 	err = json.NewDecoder(r.Body).Decode(&user) //attempts to decode the request body into the user struct
 	if err != nil {
 		http.Error(w, "Not valid REQUEST", http.StatusBadRequest)
@@ -164,7 +157,7 @@ func updateUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	//updates the user in the database using the Updates function from GORM
-	err = db.Model(&User{}).Where("id = ?", id).Updates(user).Error
+	err = db.Model(&data.User{}).Where("id = ?", id).Updates(user).Error
 	if err == gorm.ErrRecordNotFound {
 		http.Error(w, "User not found", http.StatusNotFound)
 		return
@@ -175,7 +168,7 @@ func updateUser(w http.ResponseWriter, r *http.Request) {
 	}
 
 	//Gets the updated user
-	updatedUser := User{}
+	updatedUser := data.User{}
 	err = db.First(&updatedUser, id).Error
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -203,7 +196,7 @@ func getUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	user := User{}
+	user := data.User{}
 	err = db.First(&user, id).Error //obtains the user by its id in the database using the First function from GORM
 	if err != nil {
 		if err == gorm.ErrRecordNotFound {
@@ -235,7 +228,7 @@ func deleteUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	err = db.Delete(&User{}, id).Error
+	err = db.Delete(&data.User{}, id).Error
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -249,7 +242,7 @@ func deleteUser(w http.ResponseWriter, r *http.Request) {
 }
 
 func createUser(w http.ResponseWriter, r *http.Request) {
-	var user User
+	var user data.User
 	json.NewDecoder(r.Body).Decode(&user) //attempts to decode the request body into the user struct
 
 	if r.Method != "POST" {
